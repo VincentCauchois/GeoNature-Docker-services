@@ -1,0 +1,386 @@
+version:  "3.9"
+
+services:
+
+  geonature-install-db:
+    command:
+      - geonature
+      - permissions
+      - supergrant
+      - --yes
+      - --group
+      - --nom
+      - Grp_admin
+    configs:
+      - source: geonature-config
+        target: /dist/config/geonature_config.toml
+      # - source: occtax-config
+      #   target: /dist/config/occtax_config.toml
+      # - source: import-config
+      #   target: /dist/config/import_config.toml
+    deploy:
+      replicas: 1
+  #     placement:
+  #       constraints:
+  #         - node.labels.depobio == test
+    environment:
+      GEONATURE_API_ENDPOINT: http://127.0.0.1/geonature/api
+      GEONATURE_API_TAXHUB: http://127.0.0.1/taxhub/api
+      GEONATURE_CELERY__broker_url: redis://redis
+      GEONATURE_CELERY__result_backend: redis://redis
+      GEONATURE_CONFIG_FILE: /dist/config/geonature_config.toml
+      GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://geonatadmin:geonatpasswd@postgres:5432/geonature2db_dev_docker
+      GEONATURE_URL_APPLICATION: http://127.0.0.1/geonature
+      add_sample_data: "true"
+      install_bdc_statuts: "true"
+      install_grid_layer: "true"
+      install_ref_sensitivity: "true"
+      install_sig_layers: "true"
+      srid_local: "4326"
+      taxhub: "true"
+      taxhub_samples: "true"
+      # user: ':'
+      usershub: "true"
+      usershub_samples: "true"
+    image: ghcr.io/pnx-si/geonature-backend-extra:latest
+  #   networks:
+  #     default: null
+  #   user: ':'
+    # volumes:
+    #   - type: bind
+    #     source: ./data/geonature/media
+    #     target: /dist/media
+    #     bind:
+    #       create_host_path: true
+    #   - type: bind
+    #     source: ./data/geonature/custom
+    #     target: /dist/custom
+    #     bind:
+    #       create_host_path: true
+    
+  postgres:
+    deploy:
+      replicas: 1
+  #     placement:
+  #       constraints:
+  #         - node.labels.depobio == test
+    environment:
+      POSTGRES_DB: geonature2db_dev_docker
+      POSTGRES_PASSWORD: geonatpasswd
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: geonatadmin
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -d
+        - geonature2db_dev_docker
+        - -U
+        - geonatadmin
+        - -h
+        - localhost
+      timeout: 5s
+      interval: 10s
+      retries: 5
+    image: postgis/postgis:15-3.4
+  #   networks:
+  #     default: null
+    volumes:
+      - type: volume
+        source: postgres
+        target: /var/lib/postgresql/data
+        volume: {}
+    configs:
+      - source: add-extensions-sql
+        target: /docker-entrypoint-initdb.d/add-extensions.sql
+
+  redis:
+    deploy:
+      replicas: 1
+  #     placement:
+  #       constraints:
+  #         - node.labels.depobio == test
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 5s
+      interval: 10s
+      retries: 5
+    image: redis:7-alpine
+  #   networks:
+  #     default: null
+    volumes:
+      - type: volume
+        source: redis
+        target: /data
+        volume: {}
+      
+  traefik:
+    command:
+      - --api.insecure=true
+      # - --providers.docker.swarmMode=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entryPoints.web.address=:80
+      # - --entryPoints.web.http.redirections.entrypoint.to=:443
+      # - --entryPoints.web.http.redirections.entrypoint.scheme=https
+      # - --entryPoints.websecure.address=:443
+      # - --certificatesResolvers.acme-resolver.acme.email=vincent.cauchois@gmail.com
+      # - --certificatesResolvers.acme-resolver.acme.storage=/etc/traefik/certs/acme.json
+      # - --certificatesResolvers.acme-resolver.acme.tlsChallenge=true
+    deploy:
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.labels.depobio == test
+    image: traefik:2.10.4
+    # networks:
+    #   default: null
+    ports:
+      - mode: host
+        target: 80
+        published: 80
+        protocol: tcp
+      # - mode: host
+      #   target: 443
+      #   published: 443
+      #   protocol: tcp
+      - mode: host
+        target: 8080
+        published: 8080
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+      - certs:/etc/traefik/certs
+  
+  geonature-frontend:
+    deploy:
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.labels.depobio == test
+    environment:
+      API_ENDPOINT: '"http://127.0.0.1/geonature/api"'
+      NGINX_LOCATION: /geonature
+    image: ghcr.io/pnx-si/geonature-frontend-extra:latest
+    labels:
+      traefik.enable: "true"
+      # traefik.http.routers.geonature.entrypoints: websecure
+      traefik.http.routers.geonature.rule: Host(`127.0.0.1`) && PathPrefix(`/geonature`)
+      # traefik.http.routers.geonature.tls.certResolver: acme-resolver
+      
+  geonature-backend:
+    # depends_on:
+    #   redis:
+    #     condition: service_healthy
+    #   postgres:
+    #     condition: service_healthy
+    #   geonature-install-db:
+    #     condition: service_completed_successfully
+    command:
+      - gunicorn
+      - geonature:create_app()
+      - --name=geonature
+      - --workers=2
+      - --threads=2
+      - --access-logfile=-
+      - --bind=0.0.0.0:8000
+      - --reload
+      - --reload-extra-file=/dist/config/geonature_config.toml
+    configs:
+      - source: geonature-config
+        target: /dist/config/geonature_config.toml
+  #     - source: occtax-config
+  #       target: /dist/config/occtax_config.toml
+  #     - source: import-config
+  #       target: /dist/config/import_config.toml
+    deploy:
+      replicas: 1
+  #     placement:
+  #       constraints:
+  #         - node.labels.depobio == test
+    entrypoint: []
+    environment:
+      GEONATURE_API_ENDPOINT: http://127.0.0.1/geonature/api
+      GEONATURE_API_TAXHUB: http://127.0.0.1/taxhub/api
+      GEONATURE_CELERY__broker_url: redis://redis
+      GEONATURE_CELERY__result_backend: redis://redis
+      GEONATURE_CONFIG_FILE: /dist/config/geonature_config.toml
+      GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://geonatadmin:geonatpasswd@postgres:5432/geonature2db_dev_docker
+      GEONATURE_URL_APPLICATION: http://127.0.0.1/geonature
+  #     user: ':'
+    image: ghcr.io/pnx-si/geonature-backend-extra:latest
+    labels:
+      traefik.enable: "true"
+  #     traefik.http.routers.geonature-backend.entrypoints: websecure
+      traefik.http.routers.geonature-backend.rule: Host(`127.0.0.1`) && PathPrefix(`/geonature/api`)
+  #     traefik.http.routers.geonature-backend.tls.certResolver: acme-resolver
+  #   networks:
+  #     default: null
+  #   user: ':'
+    # volumes:
+    #   - type: bind
+    #     source: ./data/geonature/media
+    #     target: /dist/media
+    #     bind:
+    #       create_host_path: true
+    #   - type: bind
+    #     source: ./data/geonature/custom
+    #     target: /dist/custom
+    #     bind:
+    #       create_host_path: false
+
+  geonature-worker:
+    # depends_on:
+    #   redis:
+    #     condition: service_healthy
+    #   postgres:
+    #     condition: service_healthy
+    #   geonature-install-db:
+    #     condition: service_completed_successfully
+    command:
+      - celery
+      - -A
+      - geonature.celery_app:app
+      - worker
+      - --beat
+      - --schedule-filename=/dist/media/celerybeat-schedule.db
+    configs:
+      - source: geonature-config
+        target: /dist/config/geonature_config.toml
+      # - source: occtax-config
+      #   target: /dist/config/occtax_config.toml
+      # - source: import-config
+      #   target: /dist/config/import_config.toml
+    deploy:
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.labels.depobio == test
+    entrypoint: []
+    environment:
+      GEONATURE_API_ENDPOINT: http://127.0.0.1/geonature/api
+      GEONATURE_API_TAXHUB: http://127.0.0.1/taxhub/api
+      GEONATURE_CELERY__broker_url: redis://redis
+      GEONATURE_CELERY__result_backend: redis://redis
+      GEONATURE_CONFIG_FILE: /dist/config/geonature_config.toml
+      GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://geonatadmin:geonatpasswd@postgres:5432/geonature2db_dev_docker
+      GEONATURE_URL_APPLICATION: http://127.0.0.1/geonature
+      # user: ':'
+    image: ghcr.io/pnx-si/geonature-backend-extra:latest
+    # networks:
+    #   default: null
+    # user: ':'
+    # volumes:
+    #   - type: bind
+    #     source: ./data/geonature/media
+    #     target: /dist/media
+    #     bind:
+    #       create_host_path: true
+    #   - type: bind
+    #     source: ./data/geonature/custom
+    #     target: /dist/custom
+    #     bind:
+    #       create_host_path: true
+
+  taxhub:
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   geonature-install-db:
+    #     condition: service_completed_successfully
+    configs:
+      - source: taxhub-config
+        target: /dist/config/config.py
+    deploy:
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.labels.depobio == test
+    environment:
+      TAXHUB_APPLICATION_ROOT: /taxhub
+      TAXHUB_COOKIE_EXPIRATION: "3600"
+      TAXHUB_PASS_METHOD: hash
+      TAXHUB_SETTINGS: /dist/config/config.py
+      TAXHUB_SQLALCHEMY_DATABASE_URI: postgresql://geonatadmin:geonatpasswd@postgres:5432/geonature2db_dev_docker
+      TAXHUB_SQLALCHEMY_TRACK_MODIFICATIONS: "False"
+      TAXHUB_UPLOAD_FOLDER: medias
+      http_proxy: ""
+      https_proxy: ""
+    image: ghcr.io/pnx-si/taxhub:latest
+    labels:
+      traefik.enable: "true"
+      # traefik.http.routers.taxhub.entrypoints: websecure
+      traefik.http.routers.taxhub.rule: Host(`127.0.0.1`) && PathPrefix(`/taxhub`)
+      # traefik.http.routers.taxhub.tls.certResolver: acme-resolver
+    # networks:
+    #   default: null
+    # user: ':'
+    # volumes:
+    #   - type: bind
+    #     source: ./data/taxhub/medias
+    #     target: /dist/static/medias
+    #     bind:
+    #       create_host_path: true
+      
+  usershub:
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   geonature-install-db:
+    #     condition: service_completed_successfully
+    configs:
+      - source: usershub-config
+        target: /dist/config/config.py
+    deploy:
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.labels.depobio == test
+    environment:
+      USERSHUB_ACTIVATE_API: "true"
+      USERSHUB_ACTIVATE_APP: "true"
+      USERSHUB_COOKIE_EXPIRATION: "3600"
+      USERSHUB_FILL_MD5_PASS: "false"
+      USERSHUB_SETTINGS: /dist/config/config.py
+      USERSHUB_SQLALCHEMY_DATABASE_URI: postgresql://geonatadmin:geonatpasswd@postgres:5432/geonature2db_dev_docker
+      USERSHUB_URL_APPLICATION: http://127.0.0.1/usershub
+      http_proxy: ""
+      https_proxy: ""
+    image: ghcr.io/pnx-si/usershub:latest
+    labels:
+      traefik.enable: "true"
+      # traefik.http.routers.usershub.entrypoints: websecure
+      traefik.http.routers.usershub.rule: Host(`127.0.0.1`) && PathPrefix(`/usershub`)
+      # traefik.http.routers.usershub.tls.certResolver: acme-resolver
+    # networks:
+    #   default: null
+    # user: ':'
+
+volumes:
+  certs:
+  postgres:
+  redis:
+  
+configs:
+  add-extensions-sql:
+    external: true
+    name: "geonature-add-extensions-sql"
+  geonature-config:
+    external: true
+    name: "depobio-geonature-config-test"
+  usershub-config:
+    external: true
+    # content: ""
+    name: "depobio-usershub-config-test"
+  taxhub-config:
+    external: true
+    name: "depobio-taxhub-config-test"
+#   import-config:
+#     name: depobio-import-config-test
+#   occtax-config:
+#     name: depobio-occtax-config-test
