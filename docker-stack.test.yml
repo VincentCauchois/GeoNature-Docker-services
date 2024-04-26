@@ -361,10 +361,45 @@ services:
     #   default: null
     # user: ':'
 
+  pgadmin:
+    # networks:
+    #   - default
+    #   - traefik
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    image: dpage/pgadmin4:8.5
+    # container_name: ${PGADMIN_CONTAINER_NAME}
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=cauchois.vincent.pro@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - SCRIPT_NAME=/admin4pg
+    # volumes:
+    #   - ${PGADMIN_VOLUME_DATA_DIRECTORY}:/var/lib/pgadmin
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gds-pg_admin-http.rule=Host(`127.0.0.1`) && PathPrefix(`/admin4pg`)"
+      - "traefik.http.routers.${PGADMIN_CONTAINER_NAME}-http.entrypoints=web"
+      # - "traefik.http.routers.${PGADMIN_CONTAINER_NAME}-http.middlewares=https-redirectscheme@file"
+      # - "traefik.http.routers.${PGADMIN_CONTAINER_NAME}-https.rule=Host(`${PGADMIN_DOMAIN}`) && PathPrefix(`${PGADMIN_PREFIX}`)"
+      # - "traefik.http.routers.${PGADMIN_CONTAINER_NAME}-https.entrypoints=websecure"
+      # - "traefik.http.routers.${PGADMIN_CONTAINER_NAME}-https.tls=${TRAEFIK_TLS}"
+      # - "traefik.http.routers.${PGADMIN_CONTAINER_NAME}-https.tls.certresolver=${TRAEFIK_RESOLVER}"
+      # - "traefik.docker.network=${TRAEFIK_NETWORK_NAME}"
+    # logging:
+    #   options:
+    #     tag: ${PGADMIN_CONTAINER_NAME}
+    volumes:
+      - type: volume
+        source: pgadmin
+        target: /var/lib/pgadmin
+        volume: {}
+
 volumes:
   certs:
   postgres:
   redis:
+  pgadmin:
   
 configs:
   add-extensions-sql:
