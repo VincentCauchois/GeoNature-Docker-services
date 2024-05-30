@@ -1,0 +1,447 @@
+version: "3.9"
+
+services:
+
+  # geonature-install-db:
+  #   image: ${GEONATURE_BACKEND_EXTRA_IMAGE}
+  #   command: "geonature permissions supergrant --yes ${GEONATURE_SUPERGRANT_ARGS:---help}"
+  #   # user: ${UID}:${GID}
+  #   environment:
+  #     GEONATURE_SKIP_POPULATE_DB: ${GEONATURE_SKIP_POPULATE_DB:-false}
+  #     GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+  #     GEONATURE_URL_APPLICATION: ${GEONATURE_FRONTEND_PROTOCOL}://${GEONATURE_FRONTEND_HOSTPORT}${GEONATURE_FRONTEND_PREFIX}
+  #     GEONATURE_API_ENDPOINT: ${GEONATURE_BACKEND_PROTOCOL}://${GEONATURE_BACKEND_HOSTPORT}${GEONATURE_BACKEND_PREFIX}
+  #     GEONATURE_API_TAXHUB: ${TAXHUB_PROTOCOL}://${TAXHUB_HOSTPORT}${TAXHUB_API_PREFIX}
+  #     GEONATURE_CONFIG_FILE: ${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}
+  #     GEONATURE_CELERY__broker_url: ${GEONATURE_CELERY__broker_url:-redis://redis}
+  #     GEONATURE_CELERY__result_backend: ${GEONATURE_CELERY__result_backend:-redis://redis}
+  #     http_proxy: ${HTTP_PROXY:-}
+  #     https_proxy: ${HTTPS_PROXY:-}
+  #     srid_local: ${GEONATURE_DB_LOCAL_SRID}
+  #     add_sample_data: ${GEONATURE_DB_ADD_SAMPLE_DATA:-false}
+  #     install_bdc_statuts: ${GEONATURE_DB_INSTALL_BDC_STATUTS:-true}
+  #     install_sig_layers: ${GEONATURE_DB_INSTALL_SIG_LAYERS:-true}
+  #     install_grid_layer: ${GEONATURE_DB_INSTALL_GRID_LAYER:-true}
+  #     install_ref_sensitivity: ${GEONATURE_DB_INSTALL_REF_SENSITIVITY:-true}
+  #     usershub: ${GEONATURE_DB_INSTALL_USERSHUB:-true}
+  #     usershub_samples: ${GEONATURE_DB_INSTALL_USERSHUB_SAMPLES:-true}
+  #     taxhub: ${GEONATURE_DB_INSTALL_TAXHUB:-true}
+  #     taxhub_samples: ${GEONATURE_DB_INSTALL_TAXHUB_SAMPLES:-true}
+  #   volumes:
+  #     - geonature-media:${GEONATURE_MEDIA_FOLDER:-/dist/media}
+  #     - geonature-custom:${GEONATURE_CUSTOM_STATIC_FOLDER:-/dist/custom}
+  #   networks:
+  #     - backend
+  #   configs:
+  #     - source: geonature-config
+  #       target: /dist/config/geonature_config.toml
+  #     - source: occhab-config
+  #       target: /dist/config/occhab_config.toml
+  #     - source: occtax-config
+  #       target: /dist/config/occtax_config.toml
+  #     - source: validation-config
+  #       target: /dist/config/validation_config.toml
+  #     - source: dashboard-config
+  #       target: /dist/config/dashboard_config.toml
+  #     - source: export-config
+  #       target: /dist/config/export_config.toml
+  #     - source: import-config
+  #       target: /dist/config/import_config.toml
+  #   deploy:
+  #     replicas: 1
+  #     placement:
+  #       constraints:
+  #         - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+  #     resources:
+  #       limits:
+  #         cpus: ${GEONATURE_INSTALL_DB_CPUS}
+  #         memory: ${GEONATURE_INSTALL_DB_MEMORY}
+  #     restart_policy:
+  #       condition: on-failure
+    
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgis/postgis:15-3.4}
+    command: 
+      - postgres 
+      - -c
+      - listen_addresses=${POSTGRES_LISTEN_ADDRESSES}
+      - -c
+      - tcp_keepalives_idle=${POSTGRES_TCP_KEEPALIVES_IDLE}
+      - -c
+      - tcp_keepalives_interval=${POSTGRES_TCP_KEEPALIVES_INTERVAL}
+      - -c
+      - tcp_keepalives_count=${POSTGRES_TCP_KEEPALIVES_COUNT}
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS}
+      - -c 
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM}
+      - -c
+      - checkpoint_completion_target=${POSTGRES_CHECKPOINT_COMPLETION_TARGET}
+      - -c
+      - wal_buffers=${POSTGRES_WAL_BUFFERS}
+      - -c
+      - default_statistics_target=${POSTGRES_DEFAULT_STATISTICS_TARGET}
+      - -c
+      - random_page_cost=${POSTGRES_RANDOM_PAGE_COST}
+      - -c
+      - effective_io_concurrency=${POSTGRES_EFFECTIVE_IO_CONCURRENCY}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM}
+      - -c
+      - huge_pages=${POSTGRES_HUGE_PAGES}
+      - -c
+      - min_wal_size=${POSTGRES_MIN_WAL_SIZE}
+      - -c
+      - max_wal_size=${POSTGRES_MAX_WAL_SIZE}
+      - -c
+      - max_worker_processes=${POSTGRES_MAX_WORKER_PROCESSES}
+      - -c
+      - max_parallel_workers_per_gather=${POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER}
+      - -c
+      - max_parallel_workers=${POSTGRES_MAX_PARALLEL_WORKERS}
+      - -c
+      - max_parallel_maintenance_workers=${POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - db-backup:/var/lib/postgresql/backup
+    ports:
+      - mode: host
+        target: 5432
+        published: ${POSTGRES_PORT_PUBLISHED:-5432}
+        protocol: tcp
+    networks:
+      - backend
+    configs:
+      - source: add-extensions-sql
+        target: /docker-entrypoint-initdb.d/add-extensions.sql
+    healthcheck:
+      # during db init, postgres is not listening on localhost so this avoid false healthy status
+      test: ["CMD", "pg_isready", "-d", "${POSTGRES_DB}", "-U", "${POSTGRES_USER}", "-h", "localhost"]
+      timeout: 5s
+      interval: 10s
+      retries: 5
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+      resources:
+        limits:
+          cpus: ${POSTGRES_CPUS}
+          memory: ${POSTGRES_MEMORY}
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    command: ["redis-server", "--loglevel", "debug"]
+    volumes:
+      - type: volume
+        source: redis
+        target: /data
+        volume: {}
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      interval: 10s
+      retries: 5
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+      resources:
+        limits:
+          cpus: ${REDIS_CPUS}
+          memory: ${REDIS_MEMORY}
+
+  geonature-worker:
+    image: ${GEONATURE_BACKEND_EXTRA_IMAGE}
+    entrypoint: []
+    command: "celery -A geonature.celery_app:app worker --beat --schedule-filename=/dist/media/celerybeat-schedule.db --concurrency=${CELERY_CONCURRENCY:-1} --loglevel=debug --without-mingle --without-gossip"
+    #command: celery -A geonature.celery_app:app worker --beat --schedule-filename=/dist/media/celerybeat-schedule.db --pool=solo --loglevel=debug
+    #user: ${UID}:${GID}
+    environment:
+      GEONATURE_SKIP_POPULATE_DB: "true"
+      GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+      GEONATURE_URL_APPLICATION: ${GEONATURE_FRONTEND_PROTOCOL}://${GEONATURE_FRONTEND_HOSTPORT}${GEONATURE_FRONTEND_PREFIX}
+      GEONATURE_API_ENDPOINT: ${GEONATURE_BACKEND_PROTOCOL}://${GEONATURE_BACKEND_HOSTPORT}${GEONATURE_BACKEND_PREFIX}
+      GEONATURE_API_TAXHUB: ${TAXHUB_PROTOCOL}://${TAXHUB_HOSTPORT}${TAXHUB_API_PREFIX}
+      GEONATURE_CONFIG_FILE: ${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}
+      GEONATURE_CELERY__broker_url: ${GEONATURE_CELERY__broker_url:-redis://redis}
+      GEONATURE_CELERY__result_backend: ${GEONATURE_CELERY__result_backend:-redis://redis}
+      http_proxy: ${HTTP_PROXY:-}
+      https_proxy: ${HTTPS_PROXY:-}
+    volumes:
+      - geonature-media:${GEONATURE_MEDIA_FOLDER:-/dist/media}
+      - geonature-custom:${GEONATURE_CUSTOM_STATIC_FOLDER:-/dist/custom}
+    networks:
+      - backend
+    configs:
+      - source: geonature-config
+        target: /dist/config/geonature_config.toml
+      - source: occhab-config
+        target: /dist/config/occhab_config.toml
+      - source: occtax-config
+        target: /dist/config/occtax_config.toml
+      - source: validation-config
+        target: /dist/config/validation_config.toml
+      - source: dashboard-config
+        target: /dist/config/dashboard_config.toml
+      - source: export-config
+        target: /dist/config/export_config.toml
+      - source: import-config
+        target: /dist/config/import_config.toml
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+      resources:
+        limits:
+          cpus: ${GEONATURE_WORKER_CPUS}
+          memory: ${GEONATURE_WORKER_MEMORY}
+
+  geonature-backend:
+    image: ${GEONATURE_BACKEND_EXTRA_IMAGE}
+    entrypoint: []
+    command:
+      - gunicorn
+      - geonature:create_app()
+      - --name=geonature
+      - --workers=2
+      - --threads=2
+      - --access-logfile=-
+      - --bind=0.0.0.0:8000
+      - --reload
+      - --reload-extra-file=${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}
+    # user: ${UID}:${GID}
+    environment:
+      GEONATURE_SKIP_POPULATE_DB: "true"
+      GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+      GEONATURE_URL_APPLICATION: ${GEONATURE_FRONTEND_PROTOCOL}://${GEONATURE_FRONTEND_HOSTPORT}${GEONATURE_FRONTEND_PREFIX}
+      GEONATURE_API_ENDPOINT: ${GEONATURE_BACKEND_PROTOCOL}://${GEONATURE_BACKEND_HOSTPORT}${GEONATURE_BACKEND_PREFIX}
+      GEONATURE_API_TAXHUB: ${TAXHUB_PROTOCOL}://${TAXHUB_HOSTPORT}${TAXHUB_API_PREFIX}
+      GEONATURE_CONFIG_FILE: ${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}
+      GEONATURE_CELERY__broker_url: ${GEONATURE_CELERY__broker_url:-redis://redis}
+      GEONATURE_CELERY__result_backend: ${GEONATURE_CELERY__result_backend:-redis://redis}
+      http_proxy: ${HTTP_PROXY:-}
+      https_proxy: ${HTTPS_PROXY:-}
+    volumes:
+      - geonature-media:${GEONATURE_MEDIA_FOLDER:-/dist/media}
+      - geonature-custom:${GEONATURE_CUSTOM_STATIC_FOLDER:-/dist/custom}
+    networks:
+      - backend
+      - traefik
+    configs:
+      - source: geonature-config
+        target: /dist/config/geonature_config.toml
+      - source: occhab-config
+        target: /dist/config/occhab_config.toml
+      - source: occtax-config
+        target: /dist/config/occtax_config.toml
+      - source: validation-config
+        target: /dist/config/validation_config.toml
+      - source: dashboard-config
+        target: /dist/config/dashboard_config.toml
+      - source: export-config
+        target: /dist/config/export_config.toml
+      - source: import-config
+        target: /dist/config/import_config.toml
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+      resources:
+        limits:
+          cpus: ${GEONATURE_BACKEND_CPUS}
+          memory: ${GEONATURE_BACKEND_MEMORY}
+      labels:
+        - "traefik.enable=true"
+        - "stack=${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-geonature-backend.entrypoints=web-${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-geonature-backend.rule=Host(`${GEONATURE_BACKEND_HOST}`) && PathPrefix(`${GEONATURE_BACKEND_PREFIX}`)"
+        - "traefik.http.services.${APP}-${ENVIRONMENT}-geonature-backend.loadbalancer.server.port=8000"
+
+  geonature-frontend:
+    image: ${GEONATURE_FRONTEND_EXTRA_IMAGE}
+    environment:
+      API_ENDPOINT: '"${GEONATURE_BACKEND_PROTOCOL}://${GEONATURE_BACKEND_HOSTPORT}${GEONATURE_BACKEND_PREFIX}"'
+      NGINX_LOCATION: ${GEONATURE_FRONTEND_PREFIX}
+    networks:
+      - frontend
+      - traefik
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+      resources:
+        limits:
+          cpus: ${GEONATURE_FRONTEND_CPUS}
+          memory: ${GEONATURE_FRONTEND_MEMORY}
+      labels:
+        - "traefik.enable=true"
+        - "stack=${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-geonature-frontend.entrypoints=web-${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-geonature-frontend.rule=Host(`${GEONATURE_FRONTEND_HOST}`) && PathPrefix(`${GEONATURE_FRONTEND_PREFIX}`)"
+        - "traefik.http.services.${APP}-${ENVIRONMENT}-geonature-frontend.loadbalancer.server.port=80"
+
+  taxhub:
+    image: ${TAXHUB_IMAGE}
+    # user: ${UID}:${GID}
+    environment:
+      TAXHUB_APPLICATION_ROOT: "${TAXHUB_PREFIX}"
+      TAXHUB_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+      TAXHUB_SETTINGS: ${TAXHUB_SETTINGS:-/dist/config/config.py}
+      TAXHUB_UPLOAD_FOLDER: "medias"
+      TAXHUB_SQLALCHEMY_TRACK_MODIFICATIONS: "False"
+      TAXHUB_COOKIE_EXPIRATION: 3600
+      TAXHUB_PASS_METHOD: "hash"
+      http_proxy: ${HTTP_PROXY:-}
+      https_proxy: ${HTTPS_PROXY:-}
+    volumes:
+      - taxhub-medias:${TAXHUB_STATIC_FOLDER:-/dist/static}/medias
+    networks:
+      - backend
+      - traefik
+    configs:
+      - source: taxhub-config
+        target: /dist/config/config.py
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+      resources:
+        limits:
+          cpus: ${TAXHUB_CPUS}
+          memory: ${TAXHUB_MEMORY}
+      labels:
+        - "traefik.enable=true"
+        - "stack=${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-taxhub.entrypoints=web-${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-taxhub.rule=Host(`${TAXHUB_HOST}`) && PathPrefix(`${TAXHUB_PREFIX}`)"
+        - "traefik.http.services.${APP}-${ENVIRONMENT}-taxhub.loadbalancer.server.port=5000"
+        
+  usershub:
+    image: ${USERSHUB_IMAGE}
+    # user: ${UID}:${GID}
+    environment:
+      USERSHUB_URL_APPLICATION: "${USERSHUB_PROTOCOL}://${USERSHUB_HOSTPORT}${USERSHUB_PREFIX}"
+      USERSHUB_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+      USERSHUB_SETTINGS: ${USERSHUB_SETTINGS:-/dist/config/config.py}
+      USERSHUB_ACTIVATE_APP: ${USERSHUB_ACTIVATE_APP:-true}
+      USERSHUB_ACTIVATE_API: ${USERSHUB_ACTIVATE_API:-true}
+      USERSHUB_COOKIE_EXPIRATION: ${USERSHUB_COOKIE_EXPIRATION:-3600}
+      USERSHUB_FILL_MD5_PASS: ${USERSHUB_FILL_MD5_PASS:-false}
+      http_proxy: ${HTTP_PROXY:-}
+      https_proxy: ${HTTPS_PROXY:-}
+    networks:
+      - backend
+      - traefik
+    configs:
+      - source: usershub-config
+        target: /dist/config/config.py
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.${PROJECT_NAME} == ${ENVIRONMENT}
+      resources:
+        limits:
+          cpus: ${USERSHUB_CPUS}
+          memory: ${USERSHUB_MEMORY}
+      labels:
+        - "traefik.enable=true"
+        - "stack=${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-usershub.entrypoints=web-${APP}-${ENVIRONMENT}"
+        - "traefik.http.routers.${APP}-${ENVIRONMENT}-usershub.rule=Host(`${USERSHUB_HOST}`) && PathPrefix(`${USERSHUB_PREFIX}`)"
+        - "traefik.http.services.${APP}-${ENVIRONMENT}-usershub.loadbalancer.server.port=5001"
+      
+volumes:
+  postgres:
+    name: "${APP}-data-postgres-${ENVIRONMENT}"
+    driver: local
+    driver_opts:
+      type: nfs
+      o: nfsvers=4,addr=192.168.40.173,nolock,rw,soft
+      device: ":/apps/nfsshare_swarm/${PROJECT_NAME}/${ENVIRONMENT}/${INSTANCE_SUB_FOLDER:-}geonature2db/data"
+  db-backup:
+    name: "${APP}-data-backup-${ENVIRONMENT}"
+    driver: local
+    driver_opts:
+      type: nfs
+      o: nfsvers=4,addr=192.168.40.173,nolock,rw,soft
+      device: ":/apps/nfsshare_swarm/${PROJECT_NAME}/${ENVIRONMENT}/${INSTANCE_SUB_FOLDER:-}geonature2db/backup"
+  redis:
+  geonature-custom:
+    name: "${APP}-geonature-custom-${ENVIRONMENT}"
+    driver: local
+    driver_opts:
+      type: nfs
+      o: nfsvers=4,addr=192.168.40.173,nolock,rw,soft
+      device: ":/apps/nfsshare_swarm/${PROJECT_NAME}/${ENVIRONMENT}/${INSTANCE_SUB_FOLDER:-}geonature/custom"
+  geonature-media:
+    name: "${APP}-geonature-media-${ENVIRONMENT}"
+    driver: local
+    driver_opts:
+      type: nfs
+      o: nfsvers=4,addr=192.168.40.173,nolock,rw,soft
+      device: ":/apps/nfsshare_swarm/${PROJECT_NAME}/${ENVIRONMENT}/${INSTANCE_SUB_FOLDER:-}geonature/media"
+  taxhub-medias:
+    name: "${APP}-taxhub-medias-${ENVIRONMENT}"
+    driver: local
+    driver_opts:
+      type: nfs
+      o: nfsvers=4,addr=192.168.40.173,nolock,rw,soft
+      device: ":/apps/nfsshare_swarm/${PROJECT_NAME}/${ENVIRONMENT}/${INSTANCE_SUB_FOLDER:-}taxhub/medias"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK}
+  backend:
+  frontend:
+
+configs:
+  add-extensions-sql:
+    external: true
+    name: "geonature-add-extensions-postgres-initdb"
+  geonature-config:
+    external: true
+    name: "${APP}-geonature-config-${ENVIRONMENT}"
+  occhab-config:
+    external: true
+    name: "${APP}-occhab-config-${ENVIRONMENT}"
+  occtax-config:
+    external: true
+    name: "${APP}-occtax-config-${ENVIRONMENT}"
+  validation-config:
+    external: true
+    name: "${APP}-validation-config-${ENVIRONMENT}"
+  dashboard-config:
+    external: true
+    name: "${APP}-dashboard-config-${ENVIRONMENT}"
+  export-config:
+    external: true
+    name: "${APP}-export-config-${ENVIRONMENT}"
+  import-config:
+    external: true
+    name: "${APP}-import-config-${ENVIRONMENT}"
+  taxhub-config:
+    external: true
+    name: "${APP}-taxhub-config-${ENVIRONMENT}"
+  usershub-config:
+    external: true
+    name: "${APP}-usershub-config-${ENVIRONMENT}"
