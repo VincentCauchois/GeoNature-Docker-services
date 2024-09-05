@@ -22,3 +22,6 @@
 [submodule "gn_module_monitoring"]
 	path = sources/gn_module_monitoring
 	url = https://github.com/PnX-SI/gn_module_monitoring
+[submodule "sources/mtd_sync"]
+	path = sources/mtd_sync
+	url = https://github.com/PnX-SI/mtd_sync.git
