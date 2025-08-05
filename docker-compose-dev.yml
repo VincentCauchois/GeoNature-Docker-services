@@ -74,7 +74,7 @@ services:
       - ./sources/mtd_sync:/sources/mtd_sync
     build:
       dockerfile: build/dev/Dockerfile-geonature-backend
-    command: watchmedo auto-restart --directory=/sources/GeoNature --pattern=*.py --recursive -- celery -A geonature.celery_app:app worker --beat --schedule-filename=/dist/media/celerybeat-schedule.db
+    command: watchmedo auto-restart --directory=/sources/GeoNature --pattern=*.py --recursive -- celery -A geonature.celery_app:app worker --beat --schedule-filename=/dist/media/celerybeat-schedule.db --loglevel=debug 
 
   postgres:
     ports:
