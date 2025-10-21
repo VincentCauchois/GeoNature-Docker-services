@@ -173,6 +173,8 @@ services:
 volumes:
   redis:
   postgres:
+    name: geonature-docker-services_postgres-cypress
+    # name: archive_2025_20_09_af_addfields_geonature-docker-services_postgres
 networks:
   gn:
     name: "${NETWORK_NAME:-geonature_network}"
