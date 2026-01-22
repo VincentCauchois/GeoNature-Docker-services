@@ -1,0 +1,1 @@
+* * * * * psql -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -w -c "SELECT * FROM gn_commons.t_modules LIMIT 1"

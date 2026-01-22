@@ -5,6 +5,7 @@ x-db-env: &db-env
   POSTGRES_DB: ${POSTGRES_DB:-geonature2db}
   POSTGRES_USER: ${POSTGRES_USER:-geonatadmin}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geonatadmin}
+  PGPASSWORD: ${POSTGRES_PASSWORD:-geonatadmin}
   POSTGRES_PORT: ${POSTGRES_PORT:-5432}
   POSTGRES_HOST: ${POSTGRES_HOST:-172.17.0.1} # 172.17.0.1 is to fetch the ip address of the host localhost
 
@@ -222,6 +223,27 @@ services:
     #     tag: geonature-atlas
     networks:
       - gn
+      
+  geonature-cron:
+    <<: *restart-policy
+    image: alpine/psql:18.1
+    profiles:
+      - atlas
+    volumes:
+      - ./assets/atlas/cron_refresh_atlas.sh:/cron_refresh_atlas.sh
+    environment:
+      <<: *db-env
+    #command: >
+    #  sh -c "cat /cron_refresh_atlas.sh > /etc/crontabs/root && crond -f -l 8"
+    entrypoint: 
+      - "sh"
+      - "-c"
+      - |
+        (printenv | grep -E '^POSTGRES_|^PGPASSWORD='; cat /cron_refresh_atlas.sh) | crontab - && 
+        crond -f -l 8
+    networks:
+      - gn
+    
 
 volumes:
   redis:
